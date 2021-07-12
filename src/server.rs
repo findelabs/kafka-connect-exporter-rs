@@ -3,74 +3,143 @@ use std::str::from_utf8;
 use std::error::Error;
 use clap::ArgMatches;
 use reqwest::{header::{HeaderMap, HeaderValue, USER_AGENT, CONTENT_TYPE}};
+use serde_json::{json, to_value, Value};
 
 type BoxResult<T> = Result<T,Box<dyn Error + Send + Sync>>;
 
+#[derive(Default, Debug, Clone)]
 pub struct Cluster {
     uri: String,
-    timeout: u16
+    timeout: u16,
+    client: reqwest::Client
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Metrics {
-    kafka_cluster_id: String,
-    connectors: Vec<Connector>
-}
-
-#[derive(Default)]
-pub struct Connector {
-    name: String,
-    connector: Head,
+    states: Vec<State>,
     tasks: Vec<Task>
 }
 
-#[derive(Default)]
-pub struct Head {
+// Example: kafka_connect_connector_state_running{connector="myconnectorKC",state="running",worker="10.233.86.239:8083"} 1
+#[derive(Default, Debug)]
+pub struct State {
+    connector: String,
     state: String,
-    worker_id: String
+    worker: String,
+    value: String
 }
 
-#[derive(Default)]
+// kafka_connect_connector_tasks_state_running{connector="myconnectorKC",id="3",state="running",worker_id="10.233.84.238:8083"} 1
+#[derive(Default, Debug)]
 pub struct Task {
-    id: u16,
+    connector: String,
+    id: String,
     state: String,
     worker_id: String,
-    trace: Option<String>
+    value: String
+}
+
+impl Metrics {
+    pub fn new() -> Self {
+        Self { states: Vec::new(), tasks: Vec::new() }
+    }
+
+    pub fn get_states(&self) -> String {
+        let mut buffer = String::new();
+        for state in &self.states {
+            let message = format!("kafka_connect_connector_state_running{{connector=\"{}\",state=\"{}\",worker=\"{}\" {} }}\n", state.connector, state.state, state.worker, state.value);
+            buffer.push_str(&message);
+        }
+        buffer
+    }
 }
 
 impl Cluster {
     pub fn new(uri: &str, timeout: &u16) -> Self {
-        Self { uri: uri.to_owned(), timeout: *timeout }
+        Self { uri: uri.to_owned(), timeout: *timeout, client: reqwest::Client::new() }
     }
 
-    async fn get_connectors(&self) -> BoxResult<Metrics> {
+    async fn get_connectors(&self) -> BoxResult<Value> {
         let uri = format!("{}/connectors", self.uri);
+        Ok(self.get_json_value(&uri).await?)
+    }
+
+    async fn get_status(&self, connector: &str) -> BoxResult<Value> {
+        let uri = format!("{}/connectors/{}/status", self.uri, connector);
+        Ok(self.get_json_value(&uri).await?)
+    }
+
+    async fn get_json_value(&self, uri: &str) -> BoxResult<Value> {
         let headers = self.headers()?;
-
-        let client = reqwest::Client::new()
-            .get(&uri)
-            .headers(headers);
-
-        match client.send().await {
+        match self.client.get(uri).headers(headers).send().await {
             Ok(m) => match m.status().as_u16() {
-                429 => Ok("Hit rate limiter".to_owned()),
                 200 => {
-                    let body = match m.text().await {
-                        Ok(b) => Ok(b),
-                        Err(e) => return Err(Box::new(e))
-                    };
-                    log::info!("Got 200, body: {}", body?);
-                    Ok("Get Ok".to_owned())
+                    let body = m.text().await?;
+                    log::debug!("Got body: {}", &body);
+                    let v: Value = serde_json::from_str(&body)?;
+                    Ok(v)
                 },
-                _ => Ok("Got weird result".to_owned())
+                _ => {
+                    log::error!("Got non-200 status: {}", m.status().as_u16());
+                    let body = m.text().await?;
+                    let v: Value = serde_json::from_str(&body)?;
+                    Ok(v)
+                } 
             },
             Err(e) => {
                 log::error!("Caught error posting: {}", e);
                 return Err(Box::new(e))
             }
         }
+    }
 
-//        Ok(Metrics::default())
+    async fn get_metrics(&self) -> BoxResult<Metrics> {
+
+        let mut metrics = Metrics::new();
+
+        let connectors = self.get_connectors().await?;
+
+        for connector in connectors.as_array().ok_or("Could not transform into array")? {
+            let connector = connector.as_str().ok_or("Could not convert connector to string")?;
+            let status = self.get_status(&connector).await?;
+
+            let connector_status = status.get("connector").ok_or("Failed to find connector in status output")?;
+            let connector_tasks = status.get("tasks").ok_or("Failed to find tasks in status output")?;
+
+            let state = State {
+                connector: connector.to_string(),
+                state: connector_status.get("state").ok_or("Missing state in connector status")?.to_string().to_lowercase(),
+                worker: connector_status.get("worker_id").ok_or("Missing worker_id in connector status")?.to_string(),
+                value: get_value(&connector_status.get("state").ok_or("Missing state in connector status")?.to_string()).to_string(),
+            };
+
+            // Add connector state to Metrics struct
+            metrics.states.push(state);
+
+            for task in connector_tasks.as_array().ok_or("Could not get tasks from connector")? {
+
+                let task = Task {
+                    connector: connector.to_string(),
+                    id: task.get("id").ok_or("Missing id in task")?.to_string(),
+                    state: task.get("state").ok_or("Missing state in task")?.to_string().to_lowercase(),
+                    worker_id: task.get("worker_id").ok_or("Missing worker_id in task")?.to_string(),
+                    value: get_value(&task.get("state").ok_or("Missing state in connector status")?.to_string()).to_string(),
+                };
+                
+                metrics.tasks.push(task);
+            };
+
+        }
+
+        Ok(metrics)
+    }
+
+    async fn metrics(&self) -> BoxResult<String> {
+        let metrics: Metrics = self.get_metrics().await?;
+
+        let string = metrics.get_states();
+
+        Ok(string)
     }
 
     fn headers(&self) -> BoxResult<HeaderMap> {
@@ -89,10 +158,10 @@ impl Cluster {
 
 // This is the main handler, to catch any failures in the echo fn
 pub async fn main_handler(
-    opts: ArgMatches<'_>,
-    req: Request<Body>
+    req: Request<Body>,
+    cluster: Cluster
 ) -> BoxResult<Response<Body>> {
-    match echo(opts, req).await {
+    match echo(req, cluster).await {
         Ok(s) => {
             log::debug!("Handler got success");
             Ok(s)
@@ -108,7 +177,7 @@ pub async fn main_handler(
 
 // This is our service handler. It receives a Request, routes on its
 // path, and returns a Future of a Response.
-async fn echo(opts: ArgMatches<'_>, req: Request<Body>) -> BoxResult<Response<Body>> {
+async fn echo(req: Request<Body>, cluster: Cluster) -> BoxResult<Response<Body>> {
 
     // Get path
     let path = &req.uri().path();
@@ -117,9 +186,11 @@ async fn echo(opts: ArgMatches<'_>, req: Request<Body>) -> BoxResult<Response<Bo
         (&Method::GET, &"/metrics") => {
             let path = req.uri().path();
             log::info!("Received GET to {}", &path);
+
+            let metrics = cluster.metrics().await?;
         
             Ok(Response::new(Body::from(format!(
-                "{{ \"msg\" : \"Display /metrics\" }}",
+                "{}", metrics
             ))))
         },
         _ => {
@@ -131,3 +202,15 @@ async fn echo(opts: ArgMatches<'_>, req: Request<Body>) -> BoxResult<Response<Bo
     }
 }
 
+fn get_value(state: &str) -> u16 {
+    match state {
+        "\"FAILED\"" => 0,
+        "\"RUNNING\"" => 1,
+        "\"UNASSIGNED\"" => 2,
+        "\"PAUSED\"" => 3,
+        _ => {
+            log::info!("Failed matching state, found {}", state);
+            0
+        }
+    }
+}

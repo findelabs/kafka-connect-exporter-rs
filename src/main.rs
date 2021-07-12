@@ -11,9 +11,9 @@ mod server;
 
 type BoxResult<T> = Result<T,Box<dyn Error + Send + Sync>>;
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() -> BoxResult<()> {
-    let opts = App::new("json-bucket")
+    let opts = App::new("kafka-connect-exporter-rs")
         .version(crate_version!())
         .author("Daniel F. <dan@findelabs.com>")
         .about("Main findereport site generator")
@@ -60,9 +60,7 @@ async fn main() -> BoxResult<()> {
                 record.args()
             )
         })
-        .target(Target::Stdout)
-        .filter_level(LevelFilter::Error)
-        .parse_default_env()
+        .filter(None, LevelFilter::Info)
         .init();
 
     // Read in config file
@@ -81,17 +79,17 @@ async fn main() -> BoxResult<()> {
 
     let addr = ([0, 0, 0, 0], port).into();
     let service = make_service_fn(move |_| {
-        let opts = opts.clone();
+        let cluster = cluster.clone();
         async move {
             Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| {
-                server::main_handler(opts.clone(), req)
+                server::main_handler(req, cluster.clone())
             }))
         }
     });
 
     let server = Server::bind(&addr).serve(service);
 
-    log::info!(
+    println!(
         "Starting json-bucket:{} on http://{}",
         crate_version!(),
         addr
