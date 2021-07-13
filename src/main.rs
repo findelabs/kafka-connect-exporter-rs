@@ -15,16 +15,16 @@ type BoxResult<T> = Result<T,Box<dyn Error + Send + Sync>>;
 async fn main() -> BoxResult<()> {
     let opts = App::new("kafka-connect-exporter-rs")
         .version(crate_version!())
-        .author("Daniel F. <dan@findelabs.com>")
-        .about("Main findereport site generator")
+        .author("Daniel F.")
+        .about("Kafka connect exporter for prometheus")
         .arg(
             Arg::with_name("uri")
                 .short("u")
                 .long("uri")
                 .required(true)
                 .value_name("URI")
-                .env("MONGODB_URI")
-                .help("MongoDB URI")
+                .env("KAFKA_CONNECT_URI")
+                .help("Kafka connect exporter")
                 .takes_value(true),
         )
         .arg(
