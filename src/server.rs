@@ -345,6 +345,11 @@ async fn echo(req: Request<Body>, cluster: Cluster) -> BoxResult<Response<Body>>
                 "{}", metrics
             ))))
         },
+        (&Method::GET, &"/health") => {
+            Ok(Response::new(Body::from(format!(
+                "{{ \"msg\" : \"healthy\" }}",
+            ))))
+        },
         _ => {
             Ok(Response::new(Body::from(format!(
                 "{{ \"msg\" : \"{} is not a known path\" }}",
