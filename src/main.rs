@@ -23,7 +23,7 @@ async fn main() -> BoxResult<()> {
                 .long("uri")
                 .required(true)
                 .value_name("URI")
-                .env("KAFKA_CONNECT_URI")
+                .env("KAFKACONNECTURI")
                 .help("Kafka connect uri")
                 .takes_value(true),
         )
@@ -33,7 +33,7 @@ async fn main() -> BoxResult<()> {
                 .long("port")
                 .help("Set port to listen on")
                 .required(false)
-                .env("LISTEN_PORT")
+                .env("LISTENPORT")
                 .default_value("8080")
                 .takes_value(true),
         )
@@ -43,7 +43,7 @@ async fn main() -> BoxResult<()> {
                 .long("timeout")
                 .help("Timeout for rest calls to connect cluster")
                 .required(false)
-                .env("HTTP_TIMEOUT")
+                .env("HTTPTIMEOUT")
                 .default_value("3")
                 .takes_value(true),
         )
