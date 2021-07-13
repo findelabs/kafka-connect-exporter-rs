@@ -127,7 +127,7 @@ impl Metrics {
         buffer.push_str("# HELP kafka_connect_connector_tasks_state_running are connector tasks running?\n");
         buffer.push_str("# TYPE kafka_connect_connector_tasks_state_running gauge\n");
         for task in &self.tasks {
-            let message = format!("kafka_connect_connector_tasks_running{{connector=\"{}\",id=\"{}\",state={},worker_id={}}} {}\n", task.connector, task.id, task.state, task.worker_id, task.value);
+            let message = format!("kafka_connect_connector_tasks_state_running{{connector=\"{}\",id=\"{}\",state={},worker_id={}}} {}\n", task.connector, task.id, task.state, task.worker_id, task.value);
             buffer.push_str(&message);
         }
         buffer
