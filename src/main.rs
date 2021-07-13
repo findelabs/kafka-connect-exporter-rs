@@ -1,6 +1,6 @@
 use chrono::Local;
 use clap::{crate_version, App, Arg};
-use env_logger::{Builder, Target};
+use env_logger::Builder;
 use log::LevelFilter;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Server};
@@ -70,12 +70,12 @@ async fn main() -> BoxResult<()> {
         8080
     });
 
-    let timeout: u16 = opts.value_of("timeout").unwrap().parse().unwrap_or_else(|_| {
+    let timeout: u64 = opts.value_of("timeout").unwrap().parse().unwrap_or_else(|_| {
         log::error!("timeout not in proper range, defaulting to 3");
         3
     });
 
-    let cluster = server::Cluster::new(&uri, &timeout);
+    let cluster = server::Cluster::new(&uri, &timeout)?;
 
     let addr = ([0, 0, 0, 0], port).into();
     let service = make_service_fn(move |_| {
@@ -90,7 +90,7 @@ async fn main() -> BoxResult<()> {
     let server = Server::bind(&addr).serve(service);
 
     println!(
-        "Starting json-bucket:{} on http://{}",
+        "Starting kafka-connecto-exporter-rs:{} on {}",
         crate_version!(),
         addr
     );
