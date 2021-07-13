@@ -124,6 +124,41 @@ impl Metrics {
         }
         buffer
     }
+
+    pub fn get_connector_count(&self) -> String {
+        let mut buffer = String::new();
+
+        buffer.push_str("# HELP kafka_connect_connectors_count number of deployed connectors\n");
+        buffer.push_str("# TYPE kafka_connect_connectors_count gauge\n");
+        let message = format!("kafka_connect_connectors_count {}\n", self.states.len());
+        buffer.push_str(&message);
+        buffer
+    }
+
+    pub fn get_task_count(&self) -> String {
+        let mut buffer = String::new();
+
+        buffer.push_str("# HELP kafka_connect_tasks_count number of tasks\n");
+        buffer.push_str("# TYPE kafka_connect_tasks_count gauge\n");
+        let message = format!("kafka_connect_tasks_count {}\n", self.tasks.len());
+        buffer.push_str(&message);
+        buffer
+    }
+
+    pub fn up(&self) -> String {
+        let value = match self.states.len() {
+            0 => 0,
+            _ => 1
+        };
+
+        let mut buffer = String::new();
+
+        buffer.push_str("# HELP kafka_connect_up was the last scrape of kafka connect successful?\n");
+        buffer.push_str("# TYPE kafka_connect_up gauge\n");
+        let message = format!("kafka_connect_up {}\n", value);
+        buffer.push_str(&message);
+        buffer
+    }
 }
 
 impl Cluster {
@@ -227,11 +262,15 @@ impl Cluster {
     }
 
     async fn metrics(&self) -> BoxResult<String> {
+        let mut buffer = String::new();
+
         let metrics: Metrics = self.get_metrics().await?;
 
-        let mut buffer = String::new();
         buffer.push_str(&metrics.get_states());
         buffer.push_str(&metrics.get_tasks());
+        buffer.push_str(&metrics.get_connector_count());
+        buffer.push_str(&metrics.get_task_count());
+        buffer.push_str(&metrics.up());
 
         Ok(buffer)
     }
