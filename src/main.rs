@@ -24,7 +24,7 @@ async fn main() -> BoxResult<()> {
                 .required(true)
                 .value_name("URI")
                 .env("KAFKA_CONNECT_URI")
-                .help("Kafka connect exporter")
+                .help("Kafka connect uri")
                 .takes_value(true),
         )
         .arg(
