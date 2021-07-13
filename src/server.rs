@@ -346,6 +346,7 @@ async fn echo(req: Request<Body>, cluster: Cluster) -> BoxResult<Response<Body>>
             ))))
         },
         (&Method::GET, &"/health") => {
+            log::info!("Received GET to {}", &path);
             Ok(Response::new(Body::from(format!(
                 "{{ \"msg\" : \"healthy\" }}",
             ))))
