@@ -90,7 +90,7 @@ async fn main() -> BoxResult<()> {
     let server = Server::bind(&addr).serve(service);
 
     println!(
-        "Starting kafka-connecto-exporter-rs:{} on {}",
+        "Starting kafka-connect-exporter-rs:{} on {}",
         crate_version!(),
         addr
     );
