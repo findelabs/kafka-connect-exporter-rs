@@ -25,7 +25,8 @@ pub struct State {
     connector: String,
     state: String,
     worker: String,
-    value: String
+    value: String,
+    tasks: String
 }
 
 // kafka_connect_connector_tasks_state_running{connector="myconnectorKC",id="3",state="running",worker_id="10.233.84.238:8083"} 1
@@ -72,6 +73,9 @@ impl State {
         // Get connector doc
         let connector = data.get("connector").ok_or("Failed to find connector")?;
 
+        // Get tasks doc
+        let tasks = data.get("tasks").ok_or("Failed to find tasks")?;
+
         // Get state of connector
         let state = connector.get("state").ok_or("Missing state in connector")?.to_string().to_lowercase();
 
@@ -84,11 +88,15 @@ impl State {
             _ => 0.to_string()
         };
 
+        // Get count of tasks
+        let tasks = tasks.as_array().ok_or("Failed converting tasks to array")?.len().to_string();
+
         let state = State {
             connector: name.to_string(),
             state,
             worker,
-            value
+            value,
+            tasks
         };
 
         Ok(state)
@@ -120,6 +128,18 @@ impl Metrics {
         buffer.push_str("# TYPE kafka_connect_connector_tasks_state_running gauge\n");
         for task in &self.tasks {
             let message = format!("kafka_connect_connector_tasks_running{{connector=\"{}\",id=\"{}\",state={},worker_id={}}} {}\n", task.connector, task.id, task.state, task.worker_id, task.value);
+            buffer.push_str(&message);
+        }
+        buffer
+    }
+
+    pub fn get_connector_tasks_count(&self) -> String {
+        let mut buffer = String::new();
+
+        buffer.push_str("# HELP kafka_connect_connector_tasks_count count of tasks per connector\n");
+        buffer.push_str("# TYPE kafka_connect_connector_tasks_count gauge\n");
+        for task in &self.states {
+            let message = format!("kafka_connect_connector_tasks_count{{connector={}}} {}\n", task.connector, task.tasks);
             buffer.push_str(&message);
         }
         buffer
@@ -270,6 +290,7 @@ impl Cluster {
         buffer.push_str(&metrics.get_tasks());
         buffer.push_str(&metrics.get_connector_count());
         buffer.push_str(&metrics.get_task_count());
+        buffer.push_str(&metrics.get_connector_tasks_count());
         buffer.push_str(&metrics.up());
 
         Ok(buffer)
