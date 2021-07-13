@@ -39,6 +39,9 @@ kafka_connect_connectors_count 1
 # HELP kafka_connect_tasks_count number of tasks
 # TYPE kafka_connect_tasks_count gauge
 kafka_connect_tasks_count 1
+# HELP kafka_connect_connector_tasks_count count of tasks per connector
+# TYPE kafka_connect_connector_tasks_count gauge
+kafka_connect_connector_tasks_count{connector="test-changesets"} 1
 # HELP kafka_connect_up was the last scrape of kafka connect successful?
 # TYPE kafka_connect_up gauge
 kafka_connect_up 1
