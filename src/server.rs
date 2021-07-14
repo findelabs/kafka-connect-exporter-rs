@@ -3,6 +3,11 @@ use std::error::Error;
 use reqwest::{header::{HeaderMap, HeaderValue, USER_AGENT, CONTENT_TYPE}};
 use serde_json::Value;
 use core::time::Duration;
+//use retry::retry;
+//use retry::delay::Fixed;
+use backoff::ExponentialBackoff;
+use backoff::future::retry;
+
 
 type BoxResult<T> = Result<T,Box<dyn Error + Send + Sync>>;
 
@@ -196,33 +201,49 @@ impl Cluster {
 
     async fn get_connectors(&self) -> BoxResult<Value> {
         let uri = format!("{}/connectors", self.uri);
-        Ok(self.get_json_value(&uri).await?)
+
+        let op = || async {
+            self.get_json_value(&uri).await
+        };
+
+        // Retry getting connectors
+        let json = retry(ExponentialBackoff::default(), op).await?;
+        let v: Value = serde_json::from_str(&json)?;
+
+        Ok(v)
     }
 
     async fn get_status(&self, connector: &str) -> BoxResult<Value> {
         let uri = format!("{}/connectors/{}/status", self.uri, connector);
-        Ok(self.get_json_value(&uri).await?)
+
+        let op = || async {
+            self.get_json_value(&uri).await
+        };
+
+        // Retry getting connectors
+        let json = retry(ExponentialBackoff::default(), op).await?;
+        let v: Value = serde_json::from_str(&json)?;
+
+        Ok(v)
     }
 
-    async fn get_json_value(&self, uri: &str) -> BoxResult<Value> {
+    async fn get_json_value(&self, uri: &str) -> Result<String, backoff::Error<reqwest::Error>> {
         match self.client.get(uri).send().await {
             Ok(m) => match m.status().as_u16() {
                 200 => {
                     let body = m.text().await?;
                     log::debug!("Got body: {}", &body);
-                    let v: Value = serde_json::from_str(&body)?;
-                    Ok(v)
+                    Ok(body)
                 },
                 _ => {
                     log::error!("Got non-200 status: {}", m.status().as_u16());
                     let body = m.text().await?;
-                    let v: Value = serde_json::from_str(&body)?;
-                    Ok(v)
+                    Ok(body)
                 } 
             },
             Err(e) => {
-                log::error!("Caught error posting: {}", e);
-                return Err(Box::new(e))
+                log::error!("Error getting {}: {}", uri, e);
+                return Err(backoff::Error::Transient(e))
             }
         }
     }
