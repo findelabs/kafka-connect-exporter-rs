@@ -206,8 +206,13 @@ impl Cluster {
             self.get_json_value(&uri).await
         };
 
+        // Set max interval to 2, and total max time to 10 seconds
+        let mut backoff = ExponentialBackoff::default();
+        backoff.max_interval = Duration::new(2, 0);
+        backoff.max_elapsed_time = Some(Duration::new(10, 0));
+
         // Retry getting connectors
-        let json = retry(ExponentialBackoff::default(), op).await?;
+        let json = retry(backoff, op).await?;
         let v: Value = serde_json::from_str(&json)?;
 
         Ok(v)
@@ -220,8 +225,13 @@ impl Cluster {
             self.get_json_value(&uri).await
         };
 
+        // Set max interval to 2, and total max time to 10 seconds
+        let mut backoff = ExponentialBackoff::default();
+        backoff.max_interval = Duration::new(2, 0);
+        backoff.max_elapsed_time = Some(Duration::new(10, 0));
+
         // Retry getting connectors
-        let json = retry(ExponentialBackoff::default(), op).await?;
+        let json = retry(backoff, op).await?;
         let v: Value = serde_json::from_str(&json)?;
 
         Ok(v)
