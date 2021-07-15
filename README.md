@@ -1,6 +1,6 @@
 # kafka-connect-exporter-rs
 
-This is a simple exporter for Kafka Connect, which provides identical metrics as that of wakeful's connect exporter and more: https://github.com/wakeful/kafka_connect_exporter.
+This is a simple exporter for Kafka Connect, which provides identical metrics as that of wakeful's connect exporter, and more: https://github.com/wakeful/kafka_connect_exporter.
 
 ### Binary Installation
 
