@@ -1,6 +1,6 @@
 # kafka-connect-exporter-rs
 
-This is a simple exporter for Kafka Connect, which provides identical metrics as that of wakeful's connect exporter: https://github.com/wakeful/kafka_connect_exporter and more.
+This is a simple exporter for Kafka Connect, which provides identical metrics as that of wakeful's connect exporter and more: https://github.com/wakeful/kafka_connect_exporter.
 
 ### Binary Installation
 
@@ -16,6 +16,10 @@ You can simply `docker build .` in this repo to create a working image.
 ### Usage
 
 ```
+kafka-connect-exporter-rs 0.0.11
+Daniel F.
+Kafka connect exporter for prometheus
+
 USAGE:
     kafka-connect-exporter-rs [OPTIONS] --uri <URI>
 
@@ -24,9 +28,9 @@ FLAGS:
     -V, --version    Prints version information
 
 OPTIONS:
-    -p, --port <port>          Set port to listen on [env: LISTEN_PORT=]  [default: 8080]
-    -t, --timeout <timeout>    Timeout for rest calls to connect cluster [env: HTTP_TIMEOUT=]  [default: 3]
-    -u, --uri <URI>            Kafka connect exporter [env: KAFKA_CONNECT_URI=]
+    -p, --port <port>          Set port to listen on [env: LISTENPORT=]  [default: 8080]
+    -t, --timeout <timeout>    Timeout for rest calls to connect cluster [env: HTTPTIMEOUT=]  [default: 3]
+    -u, --uri <URI>            Kafka connect uri [env: KAFKACONNECTURI=]
 ```
 
 ### Metrics
