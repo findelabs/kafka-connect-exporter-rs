@@ -34,7 +34,7 @@ async fn main() -> BoxResult<()> {
                 .help("Set port to listen on")
                 .required(false)
                 .env("LISTENPORT")
-                .default_value("8080")
+                .default_value("9840")
                 .takes_value(true),
         )
         .arg(
