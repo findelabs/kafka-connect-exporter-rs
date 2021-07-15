@@ -2,12 +2,16 @@
 
 This is a simple exporter for Kafka Connect, which provides identical metrics as that of wakeful's connect exporter: https://github.com/wakeful/kafka_connect_exporter and more.
 
-### Installation
+### Binary Installation
 
 Once rust has been [installed](https://www.rust-lang.org/tools/install), simply run:
 ```
 cargo install --git https://github.com/findelabs/kafka-connect-exporter-rs.git
 ```
+
+### Docker
+
+You can simply `docker build .` in this repo to create a working image.
 
 ### Usage
 
