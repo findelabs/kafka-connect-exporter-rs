@@ -11,12 +11,12 @@ cargo install --git https://github.com/findelabs/kafka-connect-exporter-rs.git
 
 ### Docker
 
-You can simply `docker build .` in this repo to create a working image.
+You can simply `docker build .` in this repo to create a working image, or pull from findelabs/kafka-connect-exporter-rs:tagname.
 
 ### Usage
 
 ```
-kafka-connect-exporter-rs 0.0.11
+kafka-connect-exporter-rs 0.0.12
 Daniel F.
 Kafka connect exporter for prometheus
 
@@ -28,7 +28,7 @@ FLAGS:
     -V, --version    Prints version information
 
 OPTIONS:
-    -p, --port <port>          Set port to listen on [env: LISTENPORT=]  [default: 8080]
+    -p, --port <port>          Set port to listen on [env: LISTENPORT=]  [default: 9840]
     -t, --timeout <timeout>    Timeout for rest calls to connect cluster [env: HTTPTIMEOUT=]  [default: 3]
     -u, --uri <URI>            Kafka connect uri [env: KAFKACONNECTURI=]
 ```
