@@ -11,7 +11,7 @@ cargo install --git https://github.com/findelabs/kafka-connect-exporter-rs.git
 
 ### Docker
 
-You can simply `docker build .` in this repo to create a working image, or pull from findelabs/kafka-connect-exporter-rs:tagname.
+You can simply `docker build .` in this repo to create a working image, or pull from `findelabs/kafka-connect-exporter-rs:tagname`.
 
 ### Usage
 
