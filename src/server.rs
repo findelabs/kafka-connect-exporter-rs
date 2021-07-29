@@ -3,11 +3,11 @@ use std::error::Error;
 use reqwest::{header::{HeaderMap, HeaderValue, USER_AGENT, CONTENT_TYPE}};
 use serde_json::Value;
 use core::time::Duration;
-//use retry::retry;
-//use retry::delay::Fixed;
 use backoff::ExponentialBackoff;
 use backoff::future::retry;
-
+use std::sync::Arc;
+use tokio::sync::RwLock;
+//use tokio::sync::Semaphore;
 
 type BoxResult<T> = Result<T,Box<dyn Error + Send + Sync>>;
 
@@ -20,12 +20,12 @@ pub struct Cluster {
 
 #[derive(Default, Debug)]
 pub struct Metrics {
-    states: Vec<State>,
-    tasks: Vec<Task>
+    states: Arc<RwLock<Vec<State>>>,
+    tasks: Arc<RwLock<Vec<Task>>>
 }
 
 // Example: kafka_connect_connector_state_running{connector="myconnectorKC",state="running",worker="10.233.86.239:8083"} 1
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct State {
     connector: String,
     state: String,
@@ -35,7 +35,7 @@ pub struct State {
 }
 
 // kafka_connect_connector_tasks_state_running{connector="myconnectorKC",id="3",state="running",worker_id="10.233.84.238:8083"} 1
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct Task {
     connector: String,
     id: String,
@@ -111,67 +111,90 @@ impl State {
 
 impl Metrics {
     pub fn new() -> Self {
-        Self { states: Vec::new(), tasks: Vec::new() }
+        Self { 
+            states: Arc::new(RwLock::new(Vec::new())), 
+            tasks: Arc::new(RwLock::new(Vec::new())) 
+        }
     }
 
-    pub fn get_states(&self) -> String {
+    pub async fn states(&self) -> Vec<State> {
+        let states = self.states.read().await;
+        states.clone()
+    }
+
+    pub async fn tasks(&self) -> Vec<Task> {
+        let tasks = self.tasks.read().await;
+        tasks.clone()
+    }
+
+    pub async fn push_state(&mut self, state: State) {
+        let mut me = self.states.write().await;
+        me.push(state);
+    }
+
+    pub async fn push_task(&mut self, task: Task) {
+        let mut me = self.tasks.write().await;
+        me.push(task);
+    }
+
+    pub async fn get_states(&self) -> String {
         let mut buffer = String::new();
         buffer.push_str("# HELP kafka_connect_connector_state_running is the connector running?\n");
         buffer.push_str("# TYPE kafka_connect_connector_state_running gauge\n");
 
-        for state in &self.states {
+        for state in self.states().await {
             let message = format!("kafka_connect_connector_state_running{{connector={},state={},worker={}}} {}\n", state.connector, state.state, state.worker, state.value);
             buffer.push_str(&message);
         }
         buffer
     }
 
-    pub fn get_tasks(&self) -> String {
+    pub async fn get_tasks(&self) -> String {
         let mut buffer = String::new();
 
         buffer.push_str("# HELP kafka_connect_connector_tasks_state_running are connector tasks running?\n");
         buffer.push_str("# TYPE kafka_connect_connector_tasks_state_running gauge\n");
-        for task in &self.tasks {
+        for task in &self.tasks().await {
             let message = format!("kafka_connect_connector_tasks_state_running{{connector=\"{}\",id=\"{}\",state={},worker_id={}}} {}\n", task.connector, task.id, task.state, task.worker_id, task.value);
             buffer.push_str(&message);
         }
         buffer
     }
 
-    pub fn get_connector_tasks_count(&self) -> String {
+    pub async fn get_connector_tasks_count(&self) -> String {
         let mut buffer = String::new();
 
         buffer.push_str("# HELP kafka_connect_connector_tasks_count count of tasks per connector\n");
         buffer.push_str("# TYPE kafka_connect_connector_tasks_count gauge\n");
-        for task in &self.states {
+        for task in &self.states().await {
             let message = format!("kafka_connect_connector_tasks_count{{connector={}}} {}\n", task.connector, task.tasks);
             buffer.push_str(&message);
         }
         buffer
     }
 
-    pub fn get_connector_count(&self) -> String {
+    pub async fn get_connector_count(&self) -> String {
         let mut buffer = String::new();
 
         buffer.push_str("# HELP kafka_connect_connectors_count number of deployed connectors\n");
         buffer.push_str("# TYPE kafka_connect_connectors_count gauge\n");
-        let message = format!("kafka_connect_connectors_count {}\n", self.states.len());
+        let message = format!("kafka_connect_connectors_count {}\n", self.states.read().await.len());
         buffer.push_str(&message);
         buffer
     }
 
-    pub fn get_task_count(&self) -> String {
+    pub async fn get_task_count(&self) -> String {
         let mut buffer = String::new();
 
         buffer.push_str("# HELP kafka_connect_tasks_count number of tasks\n");
         buffer.push_str("# TYPE kafka_connect_tasks_count gauge\n");
-        let message = format!("kafka_connect_tasks_count {}\n", self.tasks.len());
+        let message = format!("kafka_connect_tasks_count {}\n", self.tasks.read().await.len());
         buffer.push_str(&message);
         buffer
     }
 
-    pub fn up(&self) -> String {
-        let value = match self.states.len() {
+    pub async fn up(&self) -> String {
+        let value = match self.states.read().await.len() {
             0 => 0,
             _ => 1
         };
@@ -238,6 +261,7 @@ impl Cluster {
     }
 
     async fn get_json_value(&self, uri: &str) -> Result<String, backoff::Error<reqwest::Error>> {
+        log::debug!("Getting {}", &uri);
         match self.client.get(uri).send().await {
             Ok(m) => match m.status().as_u16() {
                 200 => {
@@ -263,13 +287,21 @@ impl Cluster {
         // Create metrics struct
         let mut metrics = Metrics::new();
 
+        // Get connectors from connect
         let connectors = self.get_connectors().await?;
 
-        for connector in connectors.as_array().ok_or("Could not transform into array")? {
+        // Convert connectors into an array
+        let connectors = connectors.as_array()
+            .ok_or("Could not transform into array")?;
+
+        for connector in connectors {
 
             // Get name, then get that connector's status
             let name = connector.as_str().expect("Failed to get connector from array");
-            let status = self.get_status(&name).await?;
+            let status = match self.get_status(&name).await {
+                Ok(v) => v,
+                Err(_) => continue
+            };
 
             // Generate state of connector
             let state = match State::generate(&status).await {
@@ -281,7 +313,7 @@ impl Cluster {
             };
 
             // Add connector state to Metrics struct
-            metrics.states.push(state);
+            metrics.push_state(state).await;
 
             // Get tasks from connector, this needs to survive a task missing tasks
             let tasks = match status.get("tasks") {
@@ -304,7 +336,7 @@ impl Cluster {
                 };
 
                 // Add task status to Metrics struct
-                metrics.tasks.push(task_status);
+                metrics.push_task(task_status).await;
             };
 
         }
@@ -317,12 +349,12 @@ impl Cluster {
 
         let metrics: Metrics = self.get_metrics().await?;
 
-        buffer.push_str(&metrics.get_states());
-        buffer.push_str(&metrics.get_tasks());
-        buffer.push_str(&metrics.get_connector_count());
-        buffer.push_str(&metrics.get_task_count());
-        buffer.push_str(&metrics.get_connector_tasks_count());
-        buffer.push_str(&metrics.up());
+        buffer.push_str(&metrics.get_states().await);
+        buffer.push_str(&metrics.get_tasks().await);
+        buffer.push_str(&metrics.get_connector_count().await);
+        buffer.push_str(&metrics.get_task_count().await);
+        buffer.push_str(&metrics.get_connector_tasks_count().await);
+        buffer.push_str(&metrics.up().await);
 
         Ok(buffer)
     }
