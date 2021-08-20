@@ -1,6 +1,6 @@
 [package]
 name = "kafka-connect-exporter-rs"
-version = "0.0.14"
+version = "0.0.15"
 authors = ["Daniel F."]
 edition = "2018"
 

@@ -47,6 +47,16 @@ async fn main() -> BoxResult<()> {
                 .default_value("3")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("accept_invalid")
+                .short("k")
+                .long("accept_invalid")
+                .help("Accept invalid certs from the connect cluster")
+                .required(false)
+                .env("ACCEPT_INVALID")
+                .default_value("false")
+                .takes_value(true)
+        )
         .get_matches();
 
     // Initialize log Builder
@@ -77,7 +87,12 @@ async fn main() -> BoxResult<()> {
         3
     });
 
-    let cluster = server::Cluster::new(&uri, &timeout)?;
+    let accept_invalid: bool = opts.value_of("accept_invalid").unwrap().parse().unwrap_or_else(|_| {
+        log::error!("accept invalid certs not bool, defaulting to bool");
+        false
+    });
+
+    let cluster = server::Cluster::new(&uri, &timeout, accept_invalid)?;
 
     let addr = ([0, 0, 0, 0], port).into();
     let service = make_service_fn(move |_| {

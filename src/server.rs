@@ -210,12 +210,13 @@ impl Metrics {
 }
 
 impl Cluster {
-    pub fn new(uri: &str, timeout: &u64) -> BoxResult<Self> {
+    pub fn new(uri: &str, timeout: &u64, accept_invalid: bool) -> BoxResult<Self> {
 
         let headers = Cluster::headers()?;
 
         let client = reqwest::Client::builder()
             .timeout(Duration::new(*timeout, 0))
+            .danger_accept_invalid_certs(accept_invalid)
             .default_headers(headers)
             .build()?;
 
